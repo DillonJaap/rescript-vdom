@@ -1,0 +1,9 @@
+{
+    "dependencies": {
+        "rescript": "^12.2.0"
+    },
+    "scripts": {
+        "build:res": "rescript",
+        "dev:res": "rescript watch"
+    }
+}
