@@ -12,5 +12,8 @@
             "in-source": true
         }
     ],
-    "suffix": ".res.js"
+
+    "suffix": ".res.js",
+    "bs-dependencies": ["@rescript/webapi"],
+    "bsc-flags": ["-open WebAPI.Global"]
 }

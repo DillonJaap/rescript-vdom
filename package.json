@@ -1,9 +1,17 @@
 {
+    "name": "vdom",
     "dependencies": {
+        "@rescript/webapi": "^0.1.0-experimental-e9e0d90",
         "rescript": "^12.2.0"
     },
     "scripts": {
         "build:res": "rescript",
-        "dev:res": "rescript watch"
+        "dev:res": "rescript watch",
+        "dev": "vite",
+        "build": "vite build",
+        "preview": "vite preview"
+    },
+    "devDependencies": {
+        "vite": "^8.0.0"
     }
 }
