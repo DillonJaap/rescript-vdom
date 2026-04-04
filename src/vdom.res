@@ -24,6 +24,7 @@ let rec diffOne = (l, r) => {
   switch (l, r) {
   // if text nodes match do nothing
   | (TextNode(tl), TextNode(tr)) if tl == tr => Nothing
+
   // if text nodes do not match replace
   | (TextNode(tl), TextNode(tr)) if tl != tr => Replace(r)
 
@@ -60,7 +61,7 @@ and diffList = (ls, rs) => {
   let length = Math.Int.max(Array.length(ls), Array.length(rs))
   let changeList = []
   for i in 0 to length - 1 {
-    switch (ls[i], ls[i]) {
+    switch (ls[i], rs[i]) {
     | (Some(lv), Some(rv)) => Array.push(changeList, diffOne(lv, rv))
     | (Some(_), None) => Array.push(changeList, Remove)
     | (None, Some(rv)) => Array.push(changeList, Create(rv))
@@ -80,6 +81,27 @@ let testStuff = () => {
   )
 }
 
+external htmlCollectionToArray: DOMAPI.htmlCollection => array<DOMAPI.element> = "Array.from"
+
 let apply = (el: DOMAPI.element, childrenDiff) => {
-  el.childNodes
+  let children = htmlCollectionToArray(el.children)
+  childrenDiff->Array.forEachWithIndex((diff, i) => {
+    switch diff {
+    | Remove =>
+      switch children[i] {
+      | Some(child) => Element.remove(child)
+      | None => ()
+      }
+    | Modify(modify) => // modify(children[i])
+      ()
+    | Create(node) => // let child = create(node)
+      // Element.appendChild(child)
+      ()
+    | Replace(node) => // let child = create(node)
+      // children[i]
+      // Element.replaceWith(child)
+      ()
+    | _ => ()
+    }
+  })
 }

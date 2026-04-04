@@ -84,7 +84,7 @@ function diffList(ls, rs) {
   let changeList = [];
   for (let i = 0; i < length; ++i) {
     let match = ls[i];
-    let match$1 = ls[i];
+    let match$1 = rs[i];
     if (match !== undefined) {
       if (match$1 !== undefined) {
         changeList.push(diffOne(match, match$1));
@@ -118,7 +118,20 @@ function testStuff() {
 }
 
 function apply(el, childrenDiff) {
-  return el.childNodes;
+  let children = Array.from(el.children);
+  childrenDiff.forEach((diff, i) => {
+    if (typeof diff === "object") {
+      return;
+    }
+    if (diff !== "Remove") {
+      return;
+    }
+    let child = children[i];
+    if (child !== undefined) {
+      child.remove();
+      return;
+    }
+  });
 }
 
 export {

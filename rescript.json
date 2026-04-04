@@ -14,6 +14,7 @@
     ],
 
     "suffix": ".res.js",
-    "bs-dependencies": ["@rescript/webapi"],
-    "bsc-flags": ["-open WebAPI.Global"]
+    "dependencies": ["@rescript/webapi"],
+    "compiler-flags": ["-open WebAPI.Global"],
+    "experimental-features": {"LetUnwrap": true}
 }
