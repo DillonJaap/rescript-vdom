@@ -1,47 +1,44 @@
 open WebAPI
 
-type uiObject = {
-  listeners: Dict.t<EventAPI.event => unit>,
-}
+type uiObject = {listeners: Dict.t<EventAPI.event => unit>}
 
-@get external getUI: EventAPI.eventTarget => uiObject = "_ui"
+@get external getUI: DOMAPI.element => uiObject = "_ui"
+@set external setUI: (DOMAPI.element, Dict.t<'a>) => unit = "_ui"
+
 external eventTypeToString: EventAPI.eventType => string = "%identity"
 
-let getListeners = (event: EventAPI.event) => {
-  let? Some(target) = Null.toOption(event.currentTarget)
-  Some(getUI(target).listeners)
-}
-
 let listener = (event: EventAPI.event) => {
-  let _ = {
-    let? Some(listeners) = getListeners(event)
-    let? Some(handler) = listeners->Dict.get(eventTypeToString(event.type_))
-    handler(event)
-    None
+  switch Null.toOption(event.currentTarget) {
+  | None => ()
+  | Some(target) =>
+    let ui = getUI(target->Obj.magic)
+    switch Dict.get(ui.listeners, eventTypeToString(event.type_)) {
+    | Some(handler) => handler(event)
+    | None => ()
+    }
   }
 }
 
-let setListener = (el, event, handle) => {
-  let listener_event = {
-    let? Some(listeners) = getListeners(event)
-    listeners->Dict.get(eventTypeToString(event.type_))
+let setListener = (el: DOMAPI.element, eventType: EventAPI.eventType, handle) => {
+  let ui = getUI(el)
+  if !Dict.has(ui.listeners, (eventType :> string)) {
+    Element.addEventListener(el, eventType, listener)
   }
-
-  switch listener_event {
-  | Some(_) => ()
-  | None => Element.addEventListener(el, event.type_, listener)
-  }
-
-  let _ = {
-    let? Some(listeners) = getListeners(event)
-    listeners->Dict.set(eventTypeToString(event.type_), handle)
-    None
-  }
+  Dict.set(ui.listeners, (eventType :> string), handle)
 }
 
-let eventName = str => {
-  switch String.indexOf(str, "on") == 0 {
-  | true => Some(String.slice(str, 0, 2)->String.toLowerCase())
-  | false => None
+let setEmptyListeners = (el: DOMAPI.element) => {
+  let listeners = Dict.make()
+  let ui: uiObject = {listeners: listeners}
+  setUI(el, ui->Obj.magic)
+}
+
+let eventName = (str: string) => {
+  if String.startsWith(str, "on") {
+    let eventString = str->String.slice(~start=2)->String.toLowerCase
+    let eventType = (eventString :> EventAPI.eventType)
+    Some(eventType)
+  } else {
+    None
   }
 }
