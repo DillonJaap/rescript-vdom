@@ -2,7 +2,7 @@
 
 
 function h(tag, attributesOpt, children) {
-  let attributes = attributesOpt !== undefined ? attributesOpt : /* [] */0;
+  let attributes = attributesOpt !== undefined ? attributesOpt : ({});
   return {
     TAG: "Node",
     tag: tag,
@@ -27,6 +27,8 @@ function diffOne(old, $$new) {
           _0: $$new
         };
       } else {
+        new Set(Object.keys($$new.attributes));
+        new Set(Object.keys(old.attributes));
         return {
           TAG: "Modify",
           remove: /* [] */0,

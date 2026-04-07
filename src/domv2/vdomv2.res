@@ -2,18 +2,18 @@ open WebAPI
 
 // VDOM types
 type attribute =
-  | Attribute(string, string)
-  | EventHandlerAttribute(string, EventAPI.event => unit)
+  | String(string)
+  | EventHandler(EventAPI.event => unit)
 
+// TODO tag is a varient?
 type tag = string
 
 type rec vnode =
-  // TODO tag is a varient
-  | Node({tag: tag, attributes: list<attribute>, children: list<vnode>})
+  | Node({tag: tag, attributes: dict<attribute>, children: array<vnode>})
   | Text(string)
 
-let h = (tag: tag, ~attributes=list{}: list<attribute>, children: list<vnode>) => {
-  Node({tag, attributes, children})
+let h = (tag: tag, ~attributes=[]: array<(string, attribute)>, children: array<vnode>) => {
+  Node({tag, attributes: attributes->Dict.fromArray, children})
 }
 
 let text = (str: string): vnode => {
@@ -25,11 +25,11 @@ let text = (str: string): vnode => {
 type diffOperation =
   | Create(vnode)
   | Replace(vnode)
-  | Modify({remove: list<string>, set: list<attribute>})
+  | Modify({remove: array<string>, set: array<(string, attribute)>})
   | Remove
   | Nothing
 
-let rec diffOne = (old: vnode, new: vnode): diffOperation => {
+let diffOne = (old: vnode, new: vnode): diffOperation => {
   switch (old, new) {
   // If text nodes match do nothing
   | (Text(text_old), Text(text_new)) if text_old == text_new => Nothing
@@ -42,11 +42,24 @@ let rec diffOne = (old: vnode, new: vnode): diffOperation => {
 
   // Nodes have the same tag, we need to modify the attributes
   | (Node(node_old), Node(node_new)) => {
-      let remove_attrs = list{}
-      let set_attrs = list{}
+      let remove_attrs = []
+      Dict.forEachWithKey(node_old.attributes, (_attr, key) => {
+        if node_new.attributes->Dict.has(key) {
+          remove_attrs->Array.push(key)
+        }
+      })
+
+      let set_attrs = []
+      Dict.forEachWithKey(node_new.attributes, (attr, key) => {
+        if node_old.attributes->Dict.getUnsafe(key) == attr {
+          set_attrs->Array.push((key, attr))
+        }
+      })
 
       Modify({remove: remove_attrs, set: set_attrs})
     }
-  | _ => Nothing
+
+  // Node types are different so replace
+  | (_, _) => Replace(new)
   }
 }
