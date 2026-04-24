@@ -1,168 +1,108 @@
-open WebAPI
-external htmlCollectionToArray: DOMAPI.htmlCollection => array<DOMAPI.element> = "Array.from"
+/*****************************************************************************/
+/* VDOM types */
+/*****************************************************************************/
 
-type rec node =
-  | ElementNode({tag: string, properties: dict<unknown>, children: array<node>})
-  | TextNode(string)
+type attribute =
+  | String(string)
+  | EventHandler(EventAPI.event => unit)
 
-type diffOperation =
-  | Create(node)
+// TODO tag is a varient?
+type tag = string
+
+type rec vnode =
+  | Node({tag: tag, attributes: dict<attribute>, children: array<vnode>})
+  | Text(string)
+
+let h = (tag: tag, ~attributes=[]: array<(string, attribute)>, children: array<vnode>) => {
+  Node({tag, attributes: attributes->Dict.fromArray, children})
+}
+
+let text = (str: string): vnode => {
+  Text(str)
+}
+
+/*****************************************************************************/
+/* diffing */
+/*****************************************************************************/
+type rec diffOperation =
+  | Create(vnode)
+  | Replace(vnode)
+  | Modify({remove: array<string>, set: array<(string, attribute)>, children: array<diffOperation>})
   | Remove
-  | Replace(node)
-  | Modify({remove: array<unknown>, set: dict<unknown>})
   | Nothing
 
-let h = (tag, ~properties=dict{}, children) => {
-  ElementNode({
-    tag,
-    properties,
-    children,
-  })
-}
+let rec diffOne = (old: vnode, new: vnode): diffOperation => {
+  switch (old, new) {
+  // If text nodes match do nothing
+  | (Text(text_old), Text(text_new)) if text_old == text_new => Nothing
 
-let text = (str: string): node => {TextNode(str)}
+  // If text nodes do not match replace
+  | (Text(text_old), Text(text_new)) if text_old != text_new => Replace(new)
 
-let rec diffOne = (l, r) => {
-  switch (l, r) {
-  // if text nodes match do nothing
-  | (TextNode(tl), TextNode(tr)) if tl == tr => Nothing
+  // If tags are not the same just replace them
+  | (Node(node_old), Node(node_new)) if node_old.tag != node_new.tag => Replace(new)
 
-  // if text nodes do not match replace
-  | (TextNode(tl), TextNode(tr)) if tl != tr => Replace(r)
-
-  // if the tags are not the same just replace
-  | (ElementNode(el), ElementNode(er)) if el.tag != er.tag => Replace(r)
-
-  // nodes have the same tag, so figure out what attributes set and removed
-  | (ElementNode(l), ElementNode(r)) => {
-      // get attributes to remove
-      let remove: array<unknown> = []
-      Dict.forEachWithKey(l.properties, (_v, k) => {
-        switch Dict.get(r.properties, k) {
-        | None => Array.push(remove, k->Obj.magic)
-        | Some(_) => ()
+  // Nodes have the same tag, we need to modify the attributes
+  | (Node(node_old), Node(node_new)) => {
+      let remove_attrs = []
+      Dict.forEachWithKey(node_old.attributes, (_attr, key) => {
+        if node_new.attributes->Dict.has(key) {
+          remove_attrs->Array.push(key)
         }
       })
 
-      // get properties to set
-      let set = dict{}
-      Dict.forEachWithKey(r.properties, (rv, k) => {
-        switch Dict.get(l.properties, k) {
-        | Some(lv) if lv == rv => ()
-        | _ => Dict.set(set, k, rv)
+      let set_attrs = []
+      Dict.forEachWithKey(node_new.attributes, (attr, key) => {
+        if node_old.attributes->Dict.getUnsafe(key) == attr {
+          set_attrs->Array.push((key, attr))
         }
       })
 
-      Modify({remove, set})
+      let children = diffList(node_old.children, node_new.children)
+      Modify({remove: remove_attrs, set: set_attrs, children})
     }
-  | (_, _) => Replace(r) // different node types, so replace the node
-  }
-}
-and diffList = (ls, rs) => {
-  let length = Math.Int.max(Array.length(ls), Array.length(rs))
-  let changeList = []
-  for i in 0 to length - 1 {
-    switch (ls[i], rs[i]) {
-    | (Some(lv), Some(rv)) => Array.push(changeList, diffOne(lv, rv))
-    | (Some(_), None) => Array.push(changeList, Remove)
-    | (None, Some(rv)) => Array.push(changeList, Create(rv))
-    | _ => () // should never get here
-    }
-  }
-  changeList
-}
 
-let rec create = vnode => {
-  open Document
-  // Create a text node or element node
-  switch vnode {
-  | TextNode(str) => {
-      let text = document->createTextNode(str)
-      text->Obj.magic
-    }
-  | ElementNode({tag, properties, children}) => {
-      // Create the DOM element with the correct tag and
-      // already add our object of listeners to it.
-      let el = document->createElement(tag)
-      Listeners.setEmptyListeners(el)
-
-      Dict.forEachWithKey(properties, (value, key) => {
-        // If it's an event set it otherwise set the value as a property.
-        switch Listeners.eventName(key) {
-        | Some(event) => {
-            let handle: EventAPI.event => unit = Obj.magic(value)
-            Listeners.setListener(el, event, handle)
-          }
-        | None => Properties.setProperty(key, value, el)
-        }
-      })
-
-      // Recursively create all the children and append one by one.
-      Array.forEach(children, vNodeChild => {
-        let child = create(vNodeChild)
-        let _ = Element.appendChild(el, child->Obj.magic)
-      })
-
-      el->Obj.magic
-    }
+  // Node types are different so replace
+  | (_, _) => Replace(new)
   }
 }
 
-let rec modify = (el: DOMAPI.element, ~remove: array<unknown>, ~set: dict<unknown>) => {
-  // Remove properties
-  Array.forEach(remove, prop => {
-    let prop: string = Obj.magic(prop)
-    let event = Listeners.eventName(prop)
-    switch event {
-    | None => el->Element.removeAttribute(prop)
-    | Some(evt) => {
-        let ui = Listeners.getUI(el)
-        // Remove the listener by deleting from the dict
-        Dict.delete(ui.listeners, (evt :> string))
-        el->Element.removeEventListener(evt, Listeners.listener)
-      }
-    }
-  })
+and diffList = (old: array<vnode>, new: array<vnode>) => {
+  let length = Math.Int.max(old->Array.length, new->Array.length)
+  Array.fromInitializer(~length, i => {
+    switch (old[i], new[i]) {
+    | (Some(old_node), Some(new_node)) => diffOne(old_node, new_node)
+    | (None, Some(new_node)) => Create(new_node)
+    | (Some(_old_node), None) => Remove
 
-  // Set properties
-  Dict.forEachWithKey(set, (value, prop) => {
-    let event = Listeners.eventName(prop)
-    switch event {
-    | Some(evt) => {
-        let handle: EventAPI.event => unit = Obj.magic(value)
-        Listeners.setListener(el, evt, handle)
-      }
-    | None => Properties.setProperty(prop, value, el)
+    // should never reach here
+    | _ => Nothing
     }
   })
 }
-and apply = (el: DOMAPI.element, childrenDiff) => {
-  let children = htmlCollectionToArray(el.children)
+
+/*****************************************************************************/
+/* DOM helpers */
+/*****************************************************************************/
+let removeNode = (node: DOMAPI.node) => {
+  switch Null.toOption(node.parentNode) {
+  | Some(parent) => Node.removeChild(parent, node)->ignore
+  | None => ()
+  }
+}
+
+/*****************************************************************************/
+/* application */
+/*****************************************************************************/
+let apply = (el: DOMAPI.element, childrenDiff: array<diffOperation>) => {
+  let children = Array.fromInitializer(~length=el.childNodes.length, i => {
+    el.childNodes->NodeListOf.item(i)
+  })
 
   childrenDiff->Array.forEachWithIndex((diff, i) => {
-    switch diff {
-    | Remove =>
-      switch children[i] {
-      | Some(child) => Element.remove(child)
-      | None => ()
-      }
-    | Modify(modifyData) =>
-      switch children[i] {
-      | Some(child) => modify(child, ~remove=modifyData.remove, ~set=modifyData.set)
-      | None => ()
-      }
-    | Create(node) => {
-        let child = create(node)
-        let _ = Element.appendChild(el, child)
-      }
-    | Replace(node) => {
-        let child = create(node)
-        switch children[i] {
-        | Some(old_child) => Element.replaceWith(old_child, (child :> DOMAPI.node))
-        | None => ()
-        }
-      }
-    | _ => ()
-    }
-  })
+			switch (diff, children[i]) {
+			| (Remove, Some(child))  =>  child->removeNode
+			|_  => ()
+			}
+			})
 }

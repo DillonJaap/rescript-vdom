@@ -1,7 +1,7 @@
 {
     "name": "vdom",
     "dependencies": {
-        "@rescript/webapi": "^0.1.0-experimental-e9e0d90",
+        "@rescript/webapi": "^0.1.0-experimental-29b94b3",
         "rescript": "^12.2.0"
     },
     "scripts": {

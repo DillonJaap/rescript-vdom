@@ -15,6 +15,6 @@
 
     "suffix": ".res.js",
     "dependencies": ["@rescript/webapi"],
-    "compiler-flags": ["-open WebAPI.Global"],
+    "compiler-flags": ["-open Global"],
     "experimental-features": {"LetUnwrap": true}
 }
